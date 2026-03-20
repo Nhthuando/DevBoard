@@ -1,0 +1,238 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model contracts {
+  id                              String         @id @default(uuid())
+  jobId                           String         @unique
+  proposalId                      String         @unique
+  clientId                        String
+  devId                           String
+  agreedAmount                    Decimal        @db.Decimal(10, 2)
+  status                          ContractStatus @default(ACTIVE)
+  createdAt                       DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt                       DateTime       @default(now()) @db.Timestamptz(6)
+  users_contracts_clientIdTousers users          @relation("contracts_clientIdTousers", fields: [clientId], references: [id], onUpdate: NoAction)
+  users_contracts_devIdTousers    users          @relation("contracts_devIdTousers", fields: [devId], references: [id], onUpdate: NoAction)
+  jobs                            jobs           @relation(fields: [jobId], references: [id], onUpdate: NoAction)
+  proposals                       proposals      @relation(fields: [proposalId], references: [id], onUpdate: NoAction)
+  messages                        messages[]
+  payments                        payments?
+  reviews                         reviews?
+
+  @@index([clientId], map: "idx_contracts_client_id")
+  @@index([devId], map: "idx_contracts_dev_id")
+  @@index([status], map: "idx_contracts_status")
+}
+
+model devProfiles {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  hourlyRate   Decimal? @db.Decimal(10, 2)
+  portfolioUrl String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @db.Timestamptz(6)
+  users        users    @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model jobSkills {
+  jobId   String
+  skillId String
+  jobs    jobs   @relation(fields: [jobId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  skills  skills @relation(fields: [skillId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([jobId, skillId])
+}
+
+model jobs {
+  id          String      @id @default(uuid())
+  clientId    String
+  title       String
+  description String
+  budgetMin   Decimal     @db.Decimal(10, 2)
+  budgetMax   Decimal     @db.Decimal(10, 2)
+  deadline    DateTime    @db.Timestamptz(6)
+  status      JobStatus   @default(OPEN)
+  createdAt   DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime    @default(now()) @db.Timestamptz(6)
+  contracts   contracts?
+  jobSkills   jobSkills[]
+  users       users       @relation(fields: [clientId], references: [id], onUpdate: NoAction)
+  proposals   proposals[]
+
+  @@index([clientId], map: "idx_jobs_client_id")
+  @@index([createdAt(sort: Desc)], map: "idx_jobs_created_at")
+  @@index([status], map: "idx_jobs_status")
+}
+
+model messages {
+  id         String    @id @default(uuid())
+  contractId String
+  senderId   String
+  content    String
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  contracts  contracts @relation(fields: [contractId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users      users     @relation(fields: [senderId], references: [id], onUpdate: NoAction)
+
+  @@index([contractId], map: "idx_messages_contract_id")
+  @@index([createdAt(sort: Desc)], map: "idx_messages_created_at")
+}
+
+model notifications {
+  id            String           @id @default(uuid())
+  userId        String
+  type          NotificationType
+  title         String
+  body          String
+  isRead        Boolean          @default(false)
+  referenceId   String?
+  referenceType String?
+  createdAt     DateTime         @default(now()) @db.Timestamptz(6)
+  users         users            @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([createdAt(sort: Desc)], map: "idx_notif_created_at")
+  @@index([isRead], map: "idx_notif_is_read")
+  @@index([userId], map: "idx_notif_user_id")
+}
+
+model payments {
+  id                    String        @id @default(uuid())
+  contractId            String        @unique
+  amount                Decimal       @db.Decimal(10, 2)
+  status                PaymentStatus @default(PENDING)
+  stripeSessionId       String?       @unique
+  stripePaymentIntentId String?       @unique
+  paidAt                DateTime?     @db.Timestamptz(6)
+  releasedAt            DateTime?     @db.Timestamptz(6)
+  createdAt             DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime      @default(now()) @db.Timestamptz(6)
+  contracts             contracts     @relation(fields: [contractId], references: [id], onUpdate: NoAction)
+
+  @@index([status], map: "idx_payments_status")
+}
+
+model proposalAttachments {
+  id         String    @id @default(uuid())
+  proposalId String
+  fileUrl    String
+  fileName   String
+  fileSize   Int?
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  proposals  proposals @relation(fields: [proposalId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([proposalId], map: "idx_prop_attach_prop_id")
+}
+
+model proposals {
+  id                  String                @id @default(uuid())
+  jobId               String
+  devId               String
+  coverLetter         String
+  bidAmount           Decimal               @db.Decimal(10, 2)
+  status              ProposalStatus        @default(PENDING)
+  createdAt           DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime              @default(now()) @db.Timestamptz(6)
+  contracts           contracts?
+  proposalAttachments proposalAttachments[]
+  users               users                 @relation(fields: [devId], references: [id], onUpdate: NoAction)
+  jobs                jobs                  @relation(fields: [jobId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([jobId, devId])
+  @@index([devId], map: "idx_proposals_dev_id")
+  @@index([jobId], map: "idx_proposals_job_id")
+  @@index([status], map: "idx_proposals_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model reviews {
+  id                            String    @id @default(uuid())
+  contractId                    String    @unique
+  clientId                      String
+  devId                         String
+  rating                        Int
+  comment                       String?
+  createdAt                     DateTime  @default(now()) @db.Timestamptz(6)
+  users_reviews_clientIdTousers users     @relation("reviews_clientIdTousers", fields: [clientId], references: [id], onUpdate: NoAction)
+  contracts                     contracts @relation(fields: [contractId], references: [id], onUpdate: NoAction)
+  users_reviews_devIdTousers    users     @relation("reviews_devIdTousers", fields: [devId], references: [id], onUpdate: NoAction)
+
+  @@index([devId], map: "idx_reviews_dev_id")
+}
+
+model skills {
+  id        String      @id @default(uuid())
+  name      String      @unique
+  jobSkills jobSkills[]
+}
+
+model users {
+  id                                  String          @id @default(uuid())
+  email                               String          @unique
+  password                            String
+  role                                Role
+  name                                String
+  avatarUrl                           String?
+  bio                                 String?
+  createdAt                           DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt                           DateTime        @default(now()) @db.Timestamptz(6)
+  contracts_contracts_clientIdTousers contracts[]     @relation("contracts_clientIdTousers")
+  contracts_contracts_devIdTousers    contracts[]     @relation("contracts_devIdTousers")
+  devProfiles                         devProfiles?
+  jobs                                jobs[]
+  messages                            messages[]
+  notifications                       notifications[]
+  proposals                           proposals[]
+  reviews_reviews_clientIdTousers     reviews[]       @relation("reviews_clientIdTousers")
+  reviews_reviews_devIdTousers        reviews[]       @relation("reviews_devIdTousers")
+
+  @@index([role], map: "idx_users_role")
+}
+
+enum ContractStatus {
+  ACTIVE
+  COMPLETED
+  DISPUTED
+  CANCELLED
+}
+
+enum JobStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum NotificationType {
+  PROPOSAL_RECEIVED
+  PROPOSAL_ACCEPTED
+  PROPOSAL_REJECTED
+  CONTRACT_CREATED
+  PAYMENT_ESCROWED
+  PAYMENT_RELEASED
+  NEW_MESSAGE
+  REVIEW_RECEIVED
+}
+
+enum PaymentStatus {
+  PENDING
+  ESCROWED
+  RELEASED
+  REFUNDED
+}
+
+enum ProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum Role {
+  CLIENT
+  DEV
+}
