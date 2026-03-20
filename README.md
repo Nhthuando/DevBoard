@@ -131,7 +131,7 @@ PORT=5000
 **Huu Thuan**
 > Building things, one endpoint at a time.
 
-[![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/your-username)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/Nhthuando)
 
 ---
 
