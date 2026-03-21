@@ -1,3 +1,4 @@
+
 import prisma from "../lib/prisma.js";
 import {z} from "zod";
 
@@ -34,11 +35,30 @@ const jobSchema = z.object({
         "Deadline không được quá 1 năm!"
         ),
 }).refine((data) => data.budgetMax >= data.budgetMin,{
-    message: "budgetMax phải lớn hơn budgetMin!",
+    message: "budgetMax phải lớn hơn hoặc bằng budgetMin!",
     path: ["budgetMax"], 
 }
 );
 
+
+const getJobSchema = z.object({
+    page: z.coerce.number().min(1, "Page phải lớn hơn hoặc bằng 1").default(1),
+    limit: z.coerce.number().min(1,"Limit tối thiểu 1").max(50,"Limit max là 50").default(10),
+    search: z.string().optional(),
+    budgetMin: z.coerce.number().optional(),
+    budgetMax: z.coerce.number().optional(),
+    skills: z.string().optional(),
+    sortBy: z.enum(['createdAt', 'budgetMin', 'deadline']).default('createdAt'),
+    sortOrder: z.enum(['asc','desc']).default('asc')
+}).refine((data) => {
+    if(data.budgetMin !== undefined && data.budgetMax !== undefined){
+        return data.budgetMax >= data.budgetMin;
+    }
+    return true;
+},{
+    message: "budgetMax phải lớn hơn hoặc bằng budgetMin!",
+    path: ["budgetMax"], 
+})
 
 export const createJob = async (req,res) =>{
     try {
@@ -59,5 +79,35 @@ export const createJob = async (req,res) =>{
     } catch (error) {
         console.log(error);
         return res.status(500).json({message:"Có lỗi server!"});
+    }
+}
+
+export const getAllJobs = async (req,res) =>{
+    try {
+        const result = getJobSchema.safeParse(req.query);
+        if(!result.success) return res.status(400).json({error: z.flattenError(result.error)});
+        const where = {status: "OPEN"};
+        const {page,limit,search, budgetMin,budgetMax,skills,sortBy,sortOrder} = result.data;
+        if (search) where.OR = [
+        { title: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } }
+        ];
+        if(budgetMin !== undefined) where.budgetMin = {gte : budgetMin};
+        if(budgetMax !== undefined) where.budgetMax = {lte : budgetMax};
+        if(skills) {
+            const skillsArray = skills.split(',').map((x) => x.trim().toUpperCase());
+            where.jobSkills = {some: {skills: {name: { in: skillsArray }}}};
+        }
+        const skip = (page-1)*limit;
+        const orderBy = { [sortBy] : sortOrder};
+        const [items,totalItems] = await Promise.all([
+            prisma.jobs.findMany({where,skip,orderBy, take: limit}),
+            prisma.jobs.count({where})
+        ])
+        const totalPages = Math.ceil(totalItems / limit);
+        return res.status(200).json({items, pagination: {page,limit,totalItems,totalPages}})
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({message: "Có lỗi server!"});
     }
 }
