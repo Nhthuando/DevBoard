@@ -1,6 +1,8 @@
 import prisma from "../lib/prisma.js";
 import {z} from "zod"
 import {proposalIdValidator} from "../validator/proposalValidator.js"
+import {getContractSchema} from "../validator/contractValidator.js"
+
 
 export const createContract = async (req,res) => {
     try {
@@ -26,3 +28,41 @@ export const createContract = async (req,res) => {
     }
 }
 
+export const getContracts = async (req,res) => {
+    try {
+        if(!req.user) return res.status(401).json({message: "Không thể xác thực user!"});
+        const userId = req.user.userId;
+        if(!userId) return res.status(401).json({message: "Không thể lấy user id!"});
+        const userRole = req.user.role;
+        if(!userRole) return res.status(401).json({message: "Không thể lấy role user!"});
+        const result = getContractSchema.safeParse(req.query);
+        if(!result.success) return res.status(400).json({error: z.flattenError(result.error)});
+        const {status, page, limit, sortOrder} = result.data;
+        const where = {};
+        if(status) where.status = status;
+        const skip  = (page-1)*limit;
+        const orderBy = {createdAt: sortOrder};
+        if(userRole === "CLIENT" ) {
+            where.clientId = userId;
+            const [items,totalItems] = await Promise.all([
+                prisma.contracts.findMany({where,skip,orderBy,take: limit, select: {id: true, status: true, agreedAmount: true, createdAt: true, jobs: {select: {id: true, title: true}}, users_contracts_devIdTousers  : {select : {id: true, name: true, avatarUrl: true}} }}),
+                prisma.contracts.count({where})
+            ])
+            const totalPages = Math.ceil((totalItems/limit));
+            return res.status(200).json({items, pagination: {page, limit, totalItems, totalPages}});
+        }
+        else if(userRole === "DEV"){
+            where.devId = userId;
+            const [items,totalItems] = await Promise.all([
+                prisma.contracts.findMany({where,skip,orderBy,take: limit, select: {id: true, status: true, agreedAmount: true, createdAt: true, jobs: {select: {id: true, title: true}}, users_contracts_clientIdTousers : {select : {id: true, name: true, avatarUrl: true}} }}),
+                prisma.contracts.count({where})
+            ])
+            const totalPages = Math.ceil((totalItems/limit));
+            return res.status(200).json({items, pagination: {page, limit, totalItems, totalPages}});
+        }
+        else return res.status(403).json({message: "Role không hợp lệ!"});
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({message: "Có lỗi server!"});
+    }
+}
