@@ -1,6 +1,7 @@
 import prisma from "../lib/prisma.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import {z} from "zod";
 import {loginSchema, registerSchema} from "../validator/authValidator.js";
 
 export const register = async(req,res) =>{

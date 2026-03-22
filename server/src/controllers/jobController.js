@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.js";
 import {applyJobSchemaBody, applyJobSchemaParams, getJobDetailSchema, getJobSchema, getProposalsSchema, jobSchema} from "../validator/jobValidator.js"
+import {z} from "zod";
 
 export const createJob = async (req,res) =>{
     try {
