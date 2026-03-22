@@ -25,3 +25,4 @@ export const createContract = async (req,res) => {
         return res.status(500).json({message: "Có lỗi server!"});
     }
 }
+
