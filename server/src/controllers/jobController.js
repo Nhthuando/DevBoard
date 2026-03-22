@@ -64,6 +64,15 @@ const getJobDetailSchema = z.object({
     jobId: z.uuid("JobId phải là UUID hợp lệ!")
 })
 
+const applyJobSchemaParams = z.object({
+    jobId: z.uuid("JobId phải là UUID hợp lệ!"),
+})
+const applyJobSchemaBody = z.object({
+    coverLetter: z.string().trim().min(50, "Cover letter phải tối thiểu 50 kí tự!"),
+    bidAmount: z.coerce.number("Bid amount phải là số!").min(1,"Bid amount không được <=0 !").max(10000000,"Bid amount không được vượt quá 10000000")
+
+})
+
 export const createJob = async (req,res) =>{
     try {
         if (!req.user) return res.status(401).json({ message: "Chưa xác thực!" });
@@ -136,4 +145,28 @@ export const getJobDetail = async (req,res) => {
         console.log(error);
         return res.status(500).json({message: "Có lỗi server!"});
     }
-} 
+}
+
+export const applyJob = async(req,res) =>{
+    try {
+        if (!req.user) return res.status(401).json({ message: "Chưa xác thực!" });
+        const devId = req.user.userId;
+        if(!devId) return res.status(401).json({message: "Không lấy được devId!"});
+        const resultParams = applyJobSchemaParams.safeParse(req.params);
+        if(!resultParams.success) return res.status(400).json({error: z.flattenError(resultParams.error)});
+        const resultBody = applyJobSchemaBody.safeParse(req.body);
+        if(!resultBody.success) return res.status(400).json({error: z.flattenError(resultBody.error)});
+        const {jobId} = resultParams.data;
+        const {coverLetter,bidAmount} = resultBody.data;
+        const job = await prisma.jobs.findFirst({where: {id: jobId, status: "OPEN"}});
+        if(!job) return res.status(404).json({message: "Không tìm thấy job!"});
+        if(job.clientId === devId) return res.status(403).json({message: "Không thể self-apply!"});
+        const existProposal = await prisma.proposals.findFirst({where: {devId: devId, jobId: jobId}});
+        if(existProposal) return res.status(409).json({message: "Chỉ có thể apply job 1 lần!"});
+        const proposal = await prisma.proposals.create({data: {jobId: jobId, devId: devId, coverLetter: coverLetter,bidAmount: bidAmount, status: "PENDING"}})
+        return res.status(201).json({proposal});
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({message: "Có lỗi server!"});
+    }
+}
