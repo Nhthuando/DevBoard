@@ -1,7 +1,7 @@
 import prisma from "../lib/prisma.js";
 import {z} from "zod"
 import {proposalIdValidator} from "../validator/proposalValidator.js"
-import {getContractSchema} from "../validator/contractValidator.js"
+import {getContractSchema,contractIdValidator} from "../validator/contractValidator.js"
 
 
 export const createContract = async (req,res) => {
@@ -61,6 +61,37 @@ export const getContracts = async (req,res) => {
             return res.status(200).json({items, pagination: {page, limit, totalItems, totalPages}});
         }
         else return res.status(403).json({message: "Role không hợp lệ!"});
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({message: "Có lỗi server!"});
+    }
+}
+
+export const getContractDetail = async(req,res) => {
+    try {
+        if(!req.user) return res.status(401).json({message: "Không thể xác thực user!"});
+        const userId = req.user.userId;
+        if(!userId) return res.status(401).json({message: "Không thể lấy user id!"});
+        const userRole = req.user.role;
+        if(!userRole) return res.status(401).json({message: "Không thể lấy role user!"});
+        const result = contractIdValidator.safeParse(req.params);
+        if(!result.success) return res.status(400).json({error: z.flattenError(result.error)});
+        const {contractId} = result.data;
+        const where = {id: contractId};
+        const select = {id: true,clientId: true, devId: true, status: true, agreedAmount: true, createdAt: true, jobs: {select : {id: true, title: true, status: true}}}
+        if(userRole === "CLIENT") {
+            select.users_contracts_devIdTousers = {select: {id: true, name: true, avatarUrl: true}};
+        }
+        else if(userRole === "DEV") {
+            select.users_contracts_clientIdTousers = {select: {id: true, name: true, avatarUrl: true}};
+        }
+        else return res.status(403).json({message: "Role không hợp lệ!"});
+        const contract =  await prisma.contracts.findFirst({where, select})
+        if(!contract) return res.status(404).json({message :"Không tìm thấy contract!"});
+        if(userRole === "CLIENT" && contract.clientId !== userId)   return res.status(403).json({message: "Contract không thuộc về user!"});
+        if(userRole === "DEV"    && contract.devId    !== userId) return res.status(403).json({message: "Contract không thuộc về user!"});
+        const {clientId, devId, ...safeContract} = contract
+        return res.status(200).json({safeContract});
     } catch (error) {
         console.log(error);
         return res.status(500).json({message: "Có lỗi server!"});
