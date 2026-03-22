@@ -1,4 +1,5 @@
 
+import { tr } from "zod/v4/locales";
 import prisma from "../lib/prisma.js";
 import { z} from "zod";
 
@@ -72,6 +73,10 @@ const applyJobSchemaBody = z.object({
     bidAmount: z.coerce.number("Bid amount phải là số!").min(1,"Bid amount không được <=0 !").max(10000000,"Bid amount không được vượt quá 10000000")
 
 })
+const getProposalsSchema = z.object({
+    jobId: z.uuid("JobId phải là UUID hợp lệ!")
+})
+
 
 export const createJob = async (req,res) =>{
     try {
@@ -166,7 +171,29 @@ export const applyJob = async(req,res) =>{
         const proposal = await prisma.proposals.create({data: {jobId: jobId, devId: devId, coverLetter: coverLetter,bidAmount: bidAmount, status: "PENDING"}})
         return res.status(201).json({proposal});
     } catch (error) {
+        if (error.code === "P2002") 
+        return res.status(409).json({ message: "Bạn đã apply job này rồi!" });
         console.log(error);
+        return res.status(500).json({message: "Có lỗi server!"});
+    }
+}
+
+export const getProposals = async (req,res) => {
+    try {
+        if(!req.user) return res.status(401).json({message: "Không thể xác thực user!"});
+        const clientId = req.user.userId;
+        if(!clientId) return res.status(401).json({message: "Không thể lấy client id!"});
+        const result = getProposalsSchema.safeParse(req.params);
+        if(!result.success) return res.status(400).json({error: z.flattenError(result.error)});
+        const {jobId} = result.data;
+        const job = await prisma.jobs.findFirst({where: {id: jobId}});
+        if(!job) return res.status(404).json({message: "Không tìm thấy job!"});
+        if(job.clientId !== clientId) return res.status(403).json({message: "User không phải chủ sở hữu của job!"});
+        const proposals = await prisma.proposals.findMany({where: {jobId: jobId}, orderBy: {createdAt: "desc"}, select: {id:true, coverLetter: true, bidAmount: true, status: true, createdAt : true, users: { select: {id: true, name: true, avatarUrl: true }}} });
+        if(proposals.length === 0) return res.status(404).json({message: "Không tìm thấy proposal!"});
+        return res.status(200).json({proposals});
+    } catch (error) {
+        console.log(error)
         return res.status(500).json({message: "Có lỗi server!"});
     }
 }
