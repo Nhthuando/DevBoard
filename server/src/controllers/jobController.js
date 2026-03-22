@@ -1,6 +1,6 @@
 
 import prisma from "../lib/prisma.js";
-import {z} from "zod";
+import { z} from "zod";
 
 const jobSchema = z.object({
     title: z.string().trim().
@@ -60,6 +60,10 @@ const getJobSchema = z.object({
     path: ["budgetMax"], 
 })
 
+const getJobDetailSchema = z.object({
+    jobId: z.uuid("JobId phải là UUID hợp lệ!")
+})
+
 export const createJob = async (req,res) =>{
     try {
         if (!req.user) return res.status(401).json({ message: "Chưa xác thực!" });
@@ -111,3 +115,25 @@ export const getAllJobs = async (req,res) =>{
         return res.status(500).json({message: "Có lỗi server!"});
     }
 }
+
+export const getJobDetail = async (req,res) => {
+    try {
+        const result = getJobDetailSchema.safeParse(req.params);
+        if(!result.success) return res.status(400).json({error: z.flattenError(result.error)});
+        const {jobId} = result.data;
+        const job = await prisma.jobs.findFirst({where: {id: jobId, status: "OPEN"}, 
+            include: {jobSkills: {
+                include: { skills: {
+                    select: {name: true}}}
+            }, users: {select: {
+                id: true, name: true, avatarUrl: true
+            }}}});
+        if (!job) return res.status(404).json({ message: "Không tìm thấy job!" });
+        const {jobSkills, ...rest} = job;
+        const skillsArray = jobSkills.map((e) => e.skills.name);
+        return res.status(200).json({...rest, skillsArray});
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({message: "Có lỗi server!"});
+    }
+} 
