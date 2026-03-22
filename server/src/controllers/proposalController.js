@@ -50,3 +50,23 @@ export const getDevProposals = async (req,res) => {
         return res.status(500).json({message: "Có lỗi server!"});
     }
 }
+
+export const setWithdrawStatus = async(req,res) => {
+    try {
+        if(!req.user) return res.status(401).json({message: "Không xác thực được user!"});
+        const devId = req.user.userId;
+        if(!devId) return res.status(401).json({message: "Không lấy được dev id!"});
+        const result = proposalIdValidator.safeParse(req.params);
+        if(!result.success) return res.status(400).json({error: z.flattenError(result.error)});
+        const {proposalId} = result.data;
+        const proposal = await prisma.proposals.findUnique({where: {id: proposalId}});
+        if(!proposal) return res.status(404).json({message: "Không tìm thấy proposal!"});
+        if(proposal.devId !== devId) return res.status(403).json({message: "Proposal không thuộc về dev!"});
+        if(proposal.status !== "PENDING") return res.status(409).json({message: "Proposal không cho withdraw!"});
+        const updtProposal = await prisma.proposals.update({where: {id: proposalId}, data: {status: "WITHDRAWN"}, select: {id:true, jobId: true, devId: true, createdAt: true, status: true}});
+        return res.status(200).json({updtProposal})
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({message: "Có lỗi server!"});
+    }
+} 
