@@ -1,6 +1,7 @@
+
 import prisma from "../lib/prisma.js";
 import {applyJobSchemaBody, applyJobSchemaParams, getJobDetailSchema, getJobSchema, getProposalsSchema, jobSchema} from "../validator/jobValidator.js"
-import {z} from "zod";
+import {includes, z} from "zod";
 
 export const createJob = async (req,res) =>{
     try {
@@ -118,6 +119,27 @@ export const getProposals = async (req,res) => {
         return res.status(200).json({proposals});
     } catch (error) {
         console.log(error)
+        return res.status(500).json({message: "Có lỗi server!"});
+    }
+}
+
+export const closeJob = async(req,res) => {
+    try {
+        if(!req.user) return res.status(401).json({message: "Không thể xác thực user!"});
+        const clientId = req.user.userId;
+        if(!clientId) return res.status(401).json({message: "Không thể lấy client id!"});
+        const result = getProposalsSchema.safeParse(req.params);
+        if(!result.success) return res.status(400).json({error: z.flattenError(result.error)});
+        const {jobId} = result.data;
+        const job = await prisma.jobs.findUnique({where: {id: jobId}, include: {proposals : {select: {status : true}}} });
+        if(!job) return res.status(404).json({message: "Không tìm thấy job!"});
+        if(job.clientId !== clientId) return res.status(403).json({message: "User không phải chủ job!"});
+        if(job.status !== "OPEN") return res.status(409).json({message: "Job đang không open!"});
+        if(!job.proposals.some((x) => x.status === "ACCEPTED")) return res.status(409).json({message: "Không có proposal nào đang ACCEPTED!"});
+        const updtJob = await prisma.jobs.update({where: {id: jobId}, data: {status: "IN_PROGRESS"}, select: {clientId: true, id:true, status: true, createdAt: true}})
+        return res.status(200).json({updtJob});
+    } catch (error) {
+        console.log(error);
         return res.status(500).json({message: "Có lỗi server!"});
     }
 }
