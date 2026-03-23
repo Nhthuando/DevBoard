@@ -44,3 +44,28 @@ export const changePaymentStatus = async (req,res) => {
         return res.status(500).json({message: "Có lỗi server!"});
     }
 }
+
+export const releasePayment = async (req,res) => {
+    try {
+        if(!req.user) return res.status(401).json({message: "Không thể xác thực user!"});
+        const clientId = req.user.userId;
+        if(!clientId) return res.status(401).json({message: "Không thể lấy user Id!"});
+        const result = paymentIdValidator.safeParse(req.params);
+        if(!result.success) return res.status(400).json({error: z.flattenError(result.error)});
+        const {paymentId} = result.data;
+        const payment = await prisma.payments.findUnique({where: {id: paymentId}, include: {contracts: {select: {clientId: true, status: true}}}});
+        if(!payment) return res.status(404).json({message: "Không tìm thấy payment!"});
+        if(payment.contracts.clientId !== clientId) return res.status(403).json({message: "Contract không thuộc về user!"});
+        if(payment.status !== "ESCROWED") return res.status(409).json({message: "Status payment không phải là ESCROWED!"});
+        if(payment.contracts.status !== "ACTIVE") return res.status(409).json({message: "Status của Contract phải là ACTIVE!"});
+        await prisma.$transaction([
+            prisma.payments.update({where: {id: paymentId}, data :{status: "RELEASED", releasedAt: new Date()}}),
+            prisma.contracts.update({where: {id: payment.contractId}, data: {status: "COMPLETED"}})
+        ]);
+        const updtPayment = await prisma.payments.findFirst({where: {id: paymentId}, select: {id: true, status: true, releasedAt: true, contracts: {select: {id: true, status: true}}}});
+        return res.status(200).json({updtPayment});
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({message: "Có lỗi server!"});
+    }
+}
