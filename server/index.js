@@ -4,6 +4,7 @@ import authRouter from "./src/routes/authRoute.js";
 import jobRouter from "./src/routes/jobRoute.js";
 import proposalRouter from "./src/routes/proposalRoute.js";
 import contractRouter from "./src/routes/contractRoute.js";
+import paymentRouter from "./src/routes/paymentRoute.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -20,6 +21,7 @@ app.use("/api/auth", authRouter );
 app.use("/api/jobs", jobRouter);
 app.use("/api/proposals", proposalRouter);
 app.use("/api/contracts", contractRouter);
+app.use("/api/payments", paymentRouter);
 
 app.listen(PORT, ()=>{
     console.log(`=========================================`);
