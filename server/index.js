@@ -5,6 +5,8 @@ import jobRouter from "./src/routes/jobRoute.js";
 import proposalRouter from "./src/routes/proposalRoute.js";
 import contractRouter from "./src/routes/contractRoute.js";
 import paymentRouter from "./src/routes/paymentRoute.js";
+import webhookRouter from "./src/routes/webhookRoute.js";
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -15,7 +17,7 @@ app.use(cors({
     ],
     credentials: true
 }));
-app.use("/webhook/stripe", express.raw({type: "application/json"}))
+app.use("/webhook", webhookRouter);
 
 
 app.use(express.json());

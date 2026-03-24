@@ -1,4 +1,4 @@
-import {z} from "zod";
+import { z} from "zod";
 import {contractIdValidator} from "../validator/contractValidator.js";
 import prisma from "../lib/prisma.js";
 import { paymentIdValidator } from "../validator/paymentValidator.js";
@@ -109,3 +109,36 @@ export const checkoutStripe = async(req,res) => {
         return res.status(500).json({message: "Có lỗi server!"});
     }
 }
+
+export const handleStripeWebhook = async(req,res) => {
+    try {
+        const event = stripe.webhooks.constructEvent(
+        req.body,
+        req.headers["stripe-signature"],
+        process.env.STRIPE_WEBHOOK_SECRET
+    )
+    switch(event.type){
+        case "checkout.session.completed":{
+            const session = event.data.object;
+            if(!session.metadata) return res.status(400).json({message: "Metadata không có thông tin!"});
+            if(!session.metadata.paymentId) return res.status(400).json({message: "Không lấy được paymentId từ metadata!"});
+            const payment = await prisma.payments.findUnique({where: {id: session.metadata.paymentId}});
+            if(!payment) {
+                console.log("Không tìm thấy payment!");
+                return res.status(200).json({message: "Không tìm thấy payment!"});
+            }
+            if(payment.status !== "PENDING" ) return res.status(200).json({message: "Payment status đã là ESCROWED/RELEASED"});
+            await prisma.payments.update({where: {id: session.metadata.paymentId}, data: {stripePaymentIntentId: session.payment_intent, status: "ESCROWED", paidAt: new Date()}});
+            return res.status(200).json({received: true});
+            }
+        default: {
+            return res.status(200).json({received: true});
+        }
+    }
+    } catch (error) {
+    if (error.type === "StripeSignatureVerificationError") {
+        return res.status(400).json({ message: "Signature không hợp lệ!" })
+    }
+    return res.status(500).json({ message: "Có lỗi server!" })
+    }
+} 
