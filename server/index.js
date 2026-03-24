@@ -15,6 +15,9 @@ app.use(cors({
     ],
     credentials: true
 }));
+app.use("/webhook/stripe", express.raw({type: "application/json"}))
+
+
 app.use(express.json());
 
 app.use("/api/auth", authRouter );
