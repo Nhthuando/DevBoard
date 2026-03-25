@@ -14,3 +14,16 @@ export const submitDeliverySchema = z.object({
     deliveryNote: z.string().trim().min(1,"Delivery Note không được rỗng!").max(500, "Tối đa 500 kí tự!"),
     deliveryUrl: z.url("Delivery url phải là URL hợp lệ!").optional()
 })
+
+export const reviewDeliverySchema = z.object({
+    action: z.enum(["ACCEPT","DISPUTE"]),
+    reason: z.string().min(10, "Reason phải có ít nhất 10 ký tự!").optional()
+}).refine((data) => {
+    if(data.action === "DISPUTE" && !data.reason){
+        return false;
+    }
+    return true;
+}, {
+    message: "Reason bắt buộc phải có nếu DISPUTE",
+    path: ["reason"]
+});

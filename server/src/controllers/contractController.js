@@ -1,8 +1,7 @@
 import prisma from "../lib/prisma.js";
 import {number, z} from "zod"
 import {proposalIdValidator} from "../validator/proposalValidator.js"
-import {getContractSchema,contractIdValidator, submitDeliverySchema} from "../validator/contractValidator.js"
-
+import {getContractSchema,contractIdValidator, submitDeliverySchema,reviewDeliverySchema} from "../validator/contractValidator.js"
 
 export const createContract = async (req,res) => {
     try {
@@ -126,6 +125,49 @@ export const submitDelivery = async (req,res) => {
         const reviewDeadline = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
         const [updt] = await prisma.$transaction([prisma.payments.update({where: {contractId: contractId}, data: {deliveredAt: new Date(), reviewDeadline: reviewDeadline,deliveryNote: deliveryNote, deliveryUrl: deliveryUrl }})], {isolationLevel: "Serializable"});
         return res.status(200).json({contractId: updt.contractId, deliveredAt: updt.deliveredAt, reviewDeadline: updt.reviewDeadline, deliveryNote: updt.deliveryNote, deliveryUrl: updt.deliveryUrl })
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({message: "Có lỗi server!"});
+    }
+}
+
+export const reviewDelivery = async(req,res) => {
+    try {
+        if(!req.user) return res.status(401).json({message: "Không thể xác thực user!"});
+        const userId = req.user.userId;
+        if(!userId) return res.status(401).json({message: "Không thể lấy user id!"});
+        const userRole = req.user.role;
+        if(!userRole) return res.status(401).json({message: "Không thể lấy role user!"});
+        if(userRole !== "CLIENT") return res.status(403).json({message: "Chỉ Client mới có thể review delivery!"})
+        const resultParams = contractIdValidator.safeParse(req.params);
+        if(!resultParams.success) return res.status(400).json({error: z.flattenError(resultParams.error)});
+        const resultBody = reviewDeliverySchema.safeParse(req.body);
+        if(!resultBody.success) return res.status(400).json({error : z.flattenError(resultBody.error)});
+        const {contractId} = resultParams.data;
+        const contract = await prisma.contracts.findUnique({where: {id: contractId}});
+        if(!contract) return res.status(404).json({message: "Không tìm thấy contract!"});
+        if(contract.clientId !== userId) return res.status(403).json({message: "Contract không thuộc về user!"});
+        const payment  = await prisma.payments.findUnique({where: {contractId: contractId}});
+        if(!payment) return res.status(404).json({message:"Payment không tồn tại!"});
+        if(!payment.deliveredAt) return res.status(409).json({message: "Dev chưa submit delivery!"});
+        if(new Date() > payment.reviewDeadline ) return res.status(409).json({message: "Đã hết hạn review !"});
+        if(payment.status !== "ESCROWED" || payment.reviewedAt) return res.status(409).json({message: "Payment đã reviewed!"});
+        const {action,reason} = resultBody.data;
+        if(action === "ACCEPT") {
+            await prisma.$transaction([
+                prisma.payments.update({where: {id : payment.id}, data: {status: "RELEASED",releaseType: "MANUAL", releasedAt: new Date() ,reviewedAt: new Date()}}),
+                prisma.contracts.update({where: {id: contractId}, data: {status: "COMPLETED"}})
+            ])
+            return res.status(200).json({contractId : contractId, action: "ACCEPTED", reviewedAt: new Date() });
+        }
+        if(action === "DISPUTE"){
+            await prisma.$transaction([
+            prisma.disputes.create({data: {paymentId: payment.id, openedBy: userId, reason: reason,status: "OPEN",createdAt: new Date()}}),
+            prisma.payments.update({where: {id: payment.id}, data: {status: "DISPUTED",reviewedAt: new Date()}}),
+            prisma.contracts.update({where: {id: contractId}, data: {status: "DISPUTED"}})
+            ])
+            return res.status(200).json({contractId : contractId, action: "DISPUTED", reviewedAt: new Date() });
+        }
     } catch (error) {
         console.log(error);
         return res.status(500).json({message: "Có lỗi server!"});

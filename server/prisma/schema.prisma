@@ -114,6 +114,7 @@ model payments {
   contracts             contracts     @relation(fields: [contractId], references: [id], onUpdate: NoAction)
   deliveredAt    DateTime?     @db.Timestamptz(6)
   reviewDeadline DateTime?     @db.Timestamptz(6)
+  reviewedAt DateTime? @db.Timestamptz(6)
   deliveryNote   String?
   deliveryUrl    String?
   releaseType    ReleaseType?
