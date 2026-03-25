@@ -112,8 +112,26 @@ model payments {
   createdAt             DateTime      @default(now()) @db.Timestamptz(6)
   updatedAt             DateTime      @default(now()) @db.Timestamptz(6)
   contracts             contracts     @relation(fields: [contractId], references: [id], onUpdate: NoAction)
-
+  deliveredAt    DateTime?     @db.Timestamptz(6)
+  reviewDeadline DateTime?     @db.Timestamptz(6)
+  deliveryNote   String?
+  deliveryUrl    String?
+  releaseType    ReleaseType?
+  disputes       disputes[]
   @@index([status], map: "idx_payments_status")
+}
+
+model disputes {
+  id        String        @id @default(uuid())
+  paymentId String
+  openedBy  String
+  reason    String
+  status    DisputeStatus @default(OPEN)
+  createdAt DateTime      @default(now()) @db.Timestamptz(6)
+  payments  payments      @relation(fields: [paymentId], references: [id], onUpdate: NoAction)
+  users     users         @relation(fields: [openedBy], references: [id], onUpdate: NoAction)
+
+  @@index([paymentId], map: "idx_disputes_payment_id")
 }
 
 model proposalAttachments {
@@ -189,7 +207,7 @@ model users {
   proposals                           proposals[]
   reviews_reviews_clientIdTousers     reviews[]       @relation("reviews_clientIdTousers")
   reviews_reviews_devIdTousers        reviews[]       @relation("reviews_devIdTousers")
-
+  disputes  disputes[]
   @@index([role], map: "idx_users_role")
 }
 
@@ -221,6 +239,7 @@ enum NotificationType {
 enum PaymentStatus {
   PENDING
   ESCROWED
+  DISPUTED
   RELEASED
   REFUNDED
 }
@@ -235,4 +254,13 @@ enum ProposalStatus {
 enum Role {
   CLIENT
   DEV
+}
+enum ReleaseType {
+  MANUAL
+  AUTO
+}
+
+enum DisputeStatus {
+  OPEN
+  RESOLVED
 }

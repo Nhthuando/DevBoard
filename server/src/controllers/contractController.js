@@ -1,7 +1,7 @@
 import prisma from "../lib/prisma.js";
-import {z} from "zod"
+import {number, z} from "zod"
 import {proposalIdValidator} from "../validator/proposalValidator.js"
-import {getContractSchema,contractIdValidator} from "../validator/contractValidator.js"
+import {getContractSchema,contractIdValidator, submitDeliverySchema} from "../validator/contractValidator.js"
 
 
 export const createContract = async (req,res) => {
@@ -92,6 +92,40 @@ export const getContractDetail = async(req,res) => {
         if(userRole === "DEV"    && contract.devId    !== userId) return res.status(403).json({message: "Contract không thuộc về user!"});
         const {clientId, devId, ...safeContract} = contract
         return res.status(200).json({safeContract});
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({message: "Có lỗi server!"});
+    }
+}
+
+export const submitDelivery = async (req,res) => {
+    try {
+        if(!req.user) return res.status(401).json({message: "Không thể xác thực user!"});
+        const userId = req.user.userId;
+        if(!userId) return res.status(401).json({message: "Không thể lấy user id!"});
+        const userRole = req.user.role;
+        if(!userRole) return res.status(401).json({message: "Không thể lấy role user!"});
+        if(userRole !== "DEV") return res.status(403).json({message: "Chỉ Dev mới có thể submit delivery!"})
+        const resultParams = contractIdValidator.safeParse(req.params);
+        if(!resultParams.success) return res.status(400).json({error: z.flattenError(resultParams.error)});
+        const resultBody = submitDeliverySchema.safeParse(req.body);
+        if(!resultBody.success) return res.status(400).json({error: z.flattenError(resultBody.error)});
+        const {contractId} = resultParams.data;
+        const {deliveryNote, deliveryUrl} = resultBody.data;
+        const [contract, payment] = await Promise.all([
+            prisma.contracts.findUnique({where: {id: contractId}}),
+            prisma.payments.findUnique({where: {contractId: contractId}})
+        ])
+        if(!contract) return res.status(404).json({message: "Không tìm thấy contract!"});
+        if(contract.devId !== userId) return res.status(403).json({message: "Contract không thuộc về user!"});
+        if(contract.status !== "ACTIVE") return res.status(409).json({message: "Contract status đang không ở trạng thái ACTIVE!"});
+        if(!payment) return res.status(404).json({message: "Không tìm thấy payment!"});
+        if(payment.status !== "ESCROWED") return res.status(409).json({message: "Payment status đang không ở trạng thái ESCROWED"});
+        if(payment.deliveredAt) return res.status(409).json({message: "Đã delivery rồi!"});
+        const days = Number(process.env.DATE_REVIEW_LIMIT) || 7;
+        const reviewDeadline = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+        const [updt] = await prisma.$transaction([prisma.payments.update({where: {contractId: contractId}, data: {deliveredAt: new Date(), reviewDeadline: reviewDeadline,deliveryNote: deliveryNote, deliveryUrl: deliveryUrl }})], {isolationLevel: "Serializable"});
+        return res.status(200).json({contractId: updt.contractId, deliveredAt: updt.deliveredAt, reviewDeadline: updt.reviewDeadline, deliveryNote: updt.deliveryNote, deliveryUrl: updt.deliveryUrl })
     } catch (error) {
         console.log(error);
         return res.status(500).json({message: "Có lỗi server!"});

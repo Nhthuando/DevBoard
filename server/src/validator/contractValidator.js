@@ -9,3 +9,8 @@ export const getContractSchema = z.object({
 export const contractIdValidator = z.object({
     contractId: z.uuid("Contract id phải là UUID hợp lệ!")
 })
+
+export const submitDeliverySchema = z.object({
+    deliveryNote: z.string().trim().min(1,"Delivery Note không được rỗng!").max(500, "Tối đa 500 kí tự!"),
+    deliveryUrl: z.url("Delivery url phải là URL hợp lệ!").optional()
+})

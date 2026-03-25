@@ -26,25 +26,6 @@ export const createPayment = async (req ,res) => {
     }
 }
 
-export const changePaymentStatus = async (req,res) => {
-    try {
-        if(!req.user) return res.status(401).json({message: "Không thể xác thực user!"});
-        const clientId = req.user.userId;
-        if(!clientId) return res.status(401).json({message: "Không thể lấy user Id!"});
-        const result = paymentIdValidator.safeParse(req.params);
-        if(!result.success) return res.status(400).json({error: z.flattenError(result.error)});
-        const {paymentId} = result.data;
-        const payment = await prisma.payments.findUnique({where :{ id :paymentId}, include: {contracts: {select :{clientId: true}}}});
-        if(!payment) return res.status(404).json({message: "Không tìm thấy payment!"});
-        if(payment.contracts.clientId !== clientId) return res.status(403).json({message: "Payment không thuộc về user!"});
-        if(payment.status !== "PENDING") return res.status(409).json({message: "Status không phải là PENDING!"});
-        const updtPayment = await prisma.payments.update({where : {id :paymentId }, data : {status : "ESCROWED", paidAt: new Date()}, select: {id: true, contractId: true, status: true, paidAt: true, updatedAt: true}});
-        return res.status(200).json({updtPayment});
-    } catch (error) {
-        console.log(error);
-        return res.status(500).json({message: "Có lỗi server!"});
-    }
-}
 
 export const releasePayment = async (req,res) => {
     try {
@@ -122,15 +103,10 @@ export const handleStripeWebhook = async(req,res) => {
             const session = event.data.object;
             if(!session.metadata) return res.status(400).json({message: "Metadata không có thông tin!"});
             if(!session.metadata.paymentId) return res.status(400).json({message: "Không lấy được paymentId từ metadata!"});
-            const payment = await prisma.payments.findUnique({where: {id: session.metadata.paymentId}});
-            if(!payment) {
-                console.log("Không tìm thấy payment!");
-                return res.status(200).json({message: "Không tìm thấy payment!"});
-            }
-            if(payment.status !== "PENDING" ) return res.status(200).json({message: "Payment status đã là ESCROWED/RELEASED"});
-            await prisma.payments.update({where: {id: session.metadata.paymentId}, data: {stripePaymentIntentId: session.payment_intent, status: "ESCROWED", paidAt: new Date()}});
+            const updated = await prisma.payments.updateMany({where: {id: session.metadata.paymentId,status: "PENDING"  },data: {stripePaymentIntentId: session.payment_intent,status: "ESCROWED",paidAt: new Date()}});
+            if(updated.count === 0 ) return res.status(200).json({message: "Không tìm thấy payment hoặc đã xử lý rồi!"});
             return res.status(200).json({received: true});
-            }
+        }
         default: {
             return res.status(200).json({received: true});
         }
