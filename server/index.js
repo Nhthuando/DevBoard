@@ -6,7 +6,7 @@ import proposalRouter from "./src/routes/proposalRoute.js";
 import contractRouter from "./src/routes/contractRoute.js";
 import paymentRouter from "./src/routes/paymentRoute.js";
 import webhookRouter from "./src/routes/webhookRoute.js";
-
+import {startAutoReleaseScheduler,stopAutoReleaseScheduler} from "./src/jobs/autoReleaseScheduler.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -32,4 +32,5 @@ app.listen(PORT, ()=>{
     console.log(`=========================================`);
     console.log(`🚀 Server đang chạy tại: http://localhost:${PORT}`);
     console.log(`=========================================`);
+    startAutoReleaseScheduler();
 })
