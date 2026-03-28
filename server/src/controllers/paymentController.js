@@ -90,9 +90,16 @@ export const checkoutStripe = async(req,res) => {
         const payment = await prisma.payments.findUnique({where: {id: paymentId}, include: {contracts: {select: {clientId: true, jobs: {select : {title: true}}}}}});
         if(!payment) return res.status(404).json({message: "Payment không tồn tại!"});
         if(payment.contracts.clientId !== clientId) return res.status(403).json({message: "Payment không thuộc về client!"});
-        if(payment.status !== "PENDING") return res.status(409).json({message: "Status phải là pending!"});
-        const contractId = payment.contractId;
-        const {id,url} = await stripe.checkout.sessions.create({
+        if(payment.status === "ESCROWED") return res.status(409).json({message: "Thanh toán đã hoàn tất!"});
+        if(payment.status === "RELEASED") return res.status(409).json({message: "Payment đã được release!"});
+        if(payment.status === "DISPUTED") return res.status(409).json({message: "Payment đang có dispute!"});        const contractId = payment.contractId;
+        if(payment.status === "REFUNDED") return res.status(409).json({ message: "Payment đã được hoàn tiền, không thể thanh toán lại!" });
+        if(payment.lastCheckoutAt) {
+            const diff = Date.now() - new Date(payment.lastCheckoutAt).getTime();
+            const cooldown = 30 * 1000; // 30 giây
+            if(diff < cooldown) return res.status(429).json({ message: "Vui lòng chờ 30 giây trước khi thử lại!" });
+        }
+        const {id,url, payment_intent} = await stripe.checkout.sessions.create({
             payment_method_types: ["card"],
             line_items: [{
                 price_data: {
@@ -110,8 +117,8 @@ export const checkoutStripe = async(req,res) => {
             success_url: `${process.env.CLIENT_URL}/payment/success`,
             cancel_url: `${process.env.CLIENT_URL}/payment/cancel`
         })
-        await prisma.payments.update({where: {id: paymentId}, data: {stripeSessionId: id}});
-        return res.status(200).json({sessionId : id, checkoutUrl: url});
+        await prisma.payments.update({where: {id: paymentId}, data: {stripeSessionId: id, lastCheckoutAt: new Date( ), stripePaymentIntentId: payment_intent ?? null}});
+        return res.status(200).json({sessionId : id, checkoutUrl: url, message: "Vui lòng thanh toán để tiếp tục"});
     } catch (error) {
         console.log(error);
         return res.status(500).json({message: "Có lỗi server!"});
@@ -136,13 +143,29 @@ export const handleStripeWebhook = async(req,res) => {
         }
         case "payment_intent.payment_failed" : {
             const paymentIntentId = event.data.object.id;
-            const payment = await prisma.payments.findUnique({where: {stripePaymentIntentId: paymentIntentId}});
+            const failureCode = event.data.object.last_payment_error?.code;
+            const failureMessage = event.data.object.last_payment_error?.message;
+            let payment = await prisma.payments.findFirst({
+                where: { stripePaymentIntentId: paymentIntentId }
+            });
             if(!payment) {
-                console.log({message: " Không tìm thấy Payment!"});
-                return res.status(200).json({received: true});
+                const sessions = await stripe.checkout.sessions.list({
+                    payment_intent: paymentIntentId,
+                    limit: 1
+                });
+                const sessionId = sessions.data[0]?.id;
+                if(sessionId) {
+                    payment = await prisma.payments.findFirst({
+                        where: { stripeSessionId: sessionId }
+                    });
+                }
             }
-            console.log(`${payment.id} bị Failed`);
-            return res.status(200).json({received: true});
+            if(!payment) {
+                console.log(`[Webhook] payment_intent.payment_failed | eventId: ${event.id} | intentId: ${paymentIntentId} | Không tìm thấy payment`);
+                return res.status(200).json({ received: true });
+            }
+            console.log(`[Webhook] payment_intent.payment_failed | eventId: ${event.id} | paymentId: ${payment.id} | intentId: ${paymentIntentId} | code: ${failureCode} | message: ${failureMessage}`);
+            return res.status(200).json({ received: true });
         }
         case "charge.refunded" : {
             const paymentIntentId = event.data.object.payment_intent;

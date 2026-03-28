@@ -116,6 +116,7 @@ model payments {
   reviewDeadline        DateTime?     @db.Timestamptz(6)
   deliveryNote          String?
   deliveryUrl           String?
+  lastCheckoutAt DateTime? @db.Timestamptz(6)
   reviewedAt            DateTime?     @db.Timestamptz(6)
   stripeTransferId      String?       @unique @db.VarChar
   disputes              disputes[]
