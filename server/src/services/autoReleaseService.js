@@ -17,7 +17,7 @@ export const processOneAutoRelease = async (payment, now) => {
         });
 
         if(updatedPayment.count === 0) {
-            console.log(`[AutoRelease] Payment ${payment.id} đã được xử lý`);
+            console.log(`[AutoRelease] Không có Payment nào đủ điều kiện xử lý`);
             return; 
         }
         await tx.contracts.update({

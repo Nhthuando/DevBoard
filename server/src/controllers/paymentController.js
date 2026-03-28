@@ -107,6 +107,60 @@ export const handleStripeWebhook = async(req,res) => {
             if(updated.count === 0 ) return res.status(200).json({message: "Không tìm thấy payment hoặc đã xử lý rồi!"});
             return res.status(200).json({received: true});
         }
+        case "payment_intent.payment_failed" : {
+            const paymentIntentId = event.data.object.id;
+            const payment = await prisma.payments.findUnique({where: {stripePaymentIntentId: paymentIntentId}});
+            if(!payment) {
+                console.log({message: " Không tìm thấy Payment!"});
+                return res.status(200).json({received: true});
+            }
+            console.log(`${payment.id} bị Failed`);
+            return res.status(200).json({received: true});
+        }
+        case "charge.refunded" : {
+            const paymentIntentId = event.data.object.payment_intent;
+            const payment = await prisma.payments.findUnique({where : {stripePaymentIntentId: paymentIntentId}});
+            if(!payment) {
+                console.log(`[Webhook] Không tìm thấy payment với intentId: ${paymentIntentId}`);
+                return res.status(200).json({received: true});
+            }
+            if(payment.status !== "ESCROWED"){
+                console.log("Status đang không phải ESCROWED!");
+                return res.status(200).json({received: true});
+            }
+            const upd = await prisma.payments.updateMany({where: {stripePaymentIntentId: paymentIntentId}, data: {status : "REFUNDED"}});
+            if(upd.count === 0 ) return res.status(200).json({message: "Không tìm thấy payment hoặc đã xử lý rồi!"});
+            return res.status(200).json({received: true});
+        }   
+        case "charge.dispute.created" : {
+            const paymentIntentId = event.data.object.payment_intent;
+            const payment = await prisma.payments.findUnique({where: {stripePaymentIntentId: paymentIntentId}});
+            if(!payment) {
+                console.log(`[Webhook] Không tìm thấy payment với intentId: ${paymentIntentId}`);
+                return res.status(200).json({received: true});
+            }
+            if(payment.status !== "ESCROWED") {
+                console.log("Status đang không phải ESCROWED!");
+                return res.status(200).json({received: true});
+            }
+            const contract = await prisma.contracts.findUnique({where: {id : payment.contractId}});
+            if(!contract){
+                console.log(`[Webhook] Không tìm thấy contract của payment: ${payment.id}`);
+                return res.status(200).json({received: true});
+            }
+            const existDispute = await prisma.disputes.findFirst({where: { paymentId: payment.id }});
+            if(existDispute) {
+                console.log(`[Webhook] Dispute cho payment ${payment.id} đã tồn tại, bỏ qua`);
+                return res.status(200).json({ received: true });
+            }
+            await prisma.$transaction([   
+            prisma.disputes.create({data: {paymentId: payment.id, openedBy: contract.clientId , reason: event.data.object.reason ?? "Không có lý do từ Stripe",status: "OPEN",createdAt: new Date()}}),
+            prisma.payments.update({where: {id: payment.id}, data: {status: "DISPUTED",reviewedAt: new Date()}}),
+            prisma.contracts.update({where: {id: contract.id}, data: {status: "DISPUTED"}})
+            ])
+            console.log("Đã tạo dispute!");
+            return res.status(200).json({received: true });
+        }
         default: {
             return res.status(200).json({received: true});
         }
@@ -118,3 +172,4 @@ export const handleStripeWebhook = async(req,res) => {
     return res.status(500).json({ message: "Có lỗi server!" })
     }
 } 
+
