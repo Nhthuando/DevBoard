@@ -3,6 +3,7 @@ import {contractIdValidator} from "../validator/contractValidator.js";
 import prisma from "../lib/prisma.js";
 import { paymentIdValidator } from "../validator/paymentValidator.js";
 import stripe from "../services/stripeService.js";
+import { transferToDev } from "../services/payoutService.js";
 
 export const createPayment = async (req ,res) => {
     try {
@@ -28,6 +29,7 @@ export const createPayment = async (req ,res) => {
 
 
 export const releasePayment = async (req,res) => {
+    
     try {
         if(!req.user) return res.status(401).json({message: "Không thể xác thực user!"});
         const clientId = req.user.userId;
@@ -35,19 +37,44 @@ export const releasePayment = async (req,res) => {
         const result = paymentIdValidator.safeParse(req.params);
         if(!result.success) return res.status(400).json({error: z.flattenError(result.error)});
         const {paymentId} = result.data;
-        const payment = await prisma.payments.findUnique({where: {id: paymentId}, include: {contracts: {select: {clientId: true, status: true}}}});
+        const payment = await prisma.payments.findUnique({where: {id: paymentId}, include: {contracts: {select: {clientId: true, status: true, devId: true}}}});
         if(!payment) return res.status(404).json({message: "Không tìm thấy payment!"});
         if(payment.contracts.clientId !== clientId) return res.status(403).json({message: "Contract không thuộc về user!"});
         if(payment.status !== "ESCROWED") return res.status(409).json({message: "Status payment không phải là ESCROWED!"});
         if(payment.contracts.status !== "ACTIVE") return res.status(409).json({message: "Status của Contract phải là ACTIVE!"});
-        await prisma.$transaction([
-            prisma.payments.update({where: {id: paymentId}, data :{status: "RELEASED", releasedAt: new Date()}}),
-            prisma.contracts.update({where: {id: payment.contractId}, data: {status: "COMPLETED"}})
-        ]);
+        const [user,dispute] = await Promise.all([
+            prisma.users.findUnique({where: {id: payment.contracts.devId}}),
+            prisma.disputes.findFirst({where: {paymentId: payment.id, status: "OPEN"}})
+        ])
+        if(!user) return res.status(404).json({message: "Không tìm thấy thông tin dev!"});
+        if(dispute) return res.status(409).json({message: "Đang có dispute, không thể transfer! "});
+        if(payment.stripeTransferId) return res.status(409).json({message: "Đã tất toán cho dev trước rồi!"});
+        if(!user.stripeAccountId) return res.status(409).json({message: "Không tìm thấy thông tin tài khoản stripe của DEV!"});
+        if(!payment.reviewedAt) return res.status(409).json({message: "Payment chưa được review!"})
+        const stripeTransferId = await transferToDev(user.stripeAccountId, payment.amount, payment.id);
+        console.log(`[Payout] Payment ${payment.id} | Transfer ${stripeTransferId} | Contract ${payment.contractId}`);
+        try {
+            await prisma.$transaction([
+                prisma.payments.update({where: {id: paymentId}, data: {status: "RELEASED", releasedAt: new Date(), stripeTransferId: stripeTransferId, releaseType: "MANUAL"}}),
+                prisma.contracts.update({where: {id: payment.contractId}, data: {status: "COMPLETED"}})
+            ]);
+        } catch(dbError) {
+            console.error(`[CRITICAL] cần xử lý thủ công:
+                - paymentId: ${payment.id}
+                - stripeTransferId: ${stripeTransferId}
+                - contractId: ${payment.contractId}
+                - lỗi: ${dbError.message}
+            `);
+            return res.status(500).json({message: "Có lỗi server! Vui lòng liên hệ hỗ trợ."});
+        }
         const updtPayment = await prisma.payments.findFirst({where: {id: paymentId}, select: {id: true, status: true, releasedAt: true, contracts: {select: {id: true, status: true}}}});
         return res.status(200).json({updtPayment});
     } catch (error) {
-        console.log(error);
+        if(error.type?.startsWith("Stripe")) {
+            console.error(`[Payout] Stripe lỗi `, error.message);
+            return res.status(502).json({message: "Lỗi cổng thanh toán!"});
+        }
+        console.error(`[Payout] DB fail sau khi Stripe transfer | CẦN XỬ LÝ THỦ CÔNG`, error);
         return res.status(500).json({message: "Có lỗi server!"});
     }
 }

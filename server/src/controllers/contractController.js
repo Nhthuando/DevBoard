@@ -154,11 +154,8 @@ export const reviewDelivery = async(req,res) => {
         if(payment.status !== "ESCROWED" || payment.reviewedAt) return res.status(409).json({message: "Payment đã reviewed!"});
         const {action,reason} = resultBody.data;
         if(action === "ACCEPT") {
-            await prisma.$transaction([
-                prisma.payments.update({where: {id : payment.id}, data: {status: "RELEASED",releaseType: "MANUAL", releasedAt: new Date() ,reviewedAt: new Date()}}),
-                prisma.contracts.update({where: {id: contractId}, data: {status: "COMPLETED"}})
-            ])
-            return res.status(200).json({contractId : contractId, action: "ACCEPTED", reviewedAt: new Date() });
+            
+            return res.status(200).json({message:"Đã review!"});
         }
         if(action === "DISPUTE"){
             await prisma.$transaction([
