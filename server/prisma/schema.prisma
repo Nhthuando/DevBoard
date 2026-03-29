@@ -120,6 +120,7 @@ model payments {
   reviewedAt            DateTime?     @db.Timestamptz(6)
   stripeTransferId      String?       @unique @db.VarChar
   disputes              disputes[]
+  paymentLogs paymentLogs[] 
   contracts             contracts     @relation(fields: [contractId], references: [id], onUpdate: NoAction)
 
   @@index([status], map: "idx_payments_status")
@@ -215,6 +216,40 @@ model users {
   reviews_reviews_devIdTousers        reviews[]       @relation("reviews_devIdTousers")
 
   @@index([role], map: "idx_users_role")
+}
+
+model paymentLogs {
+  id          String      @id @default(uuid())
+  paymentId   String
+  fromStatus  PaymentStatus?
+  toStatus    PaymentStatus?
+  actorType   ActorType
+  action      LogAction
+  stripeRef   String?
+  note        String?
+  createdAt   DateTime    @default(now()) @db.Timestamptz(6)
+  payments    payments    @relation(fields: [paymentId], references: [id], onUpdate: NoAction)
+
+  @@index([paymentId], map: "idx_payment_logs_payment_id")
+}
+
+enum ActorType {
+  SYSTEM
+  CLIENT
+  WEBHOOK
+  SCHEDULER
+}
+
+enum LogAction {
+  CHECKOUT_INITIATED
+  CHECKOUT_COMPLETED
+  PAYMENT_FAILED
+  RELEASE_MANUAL
+  RELEASE_AUTO
+  REFUND_WEBHOOK
+  DISPUTE_OPENED
+  DISPUTE_WEBHOOK
+  RECONCILE_REQUIRED
 }
 
 enum ContractStatus {

@@ -1,9 +1,9 @@
-import { z} from "zod";
 import {contractIdValidator} from "../validator/contractValidator.js";
 import prisma from "../lib/prisma.js";
-import { paymentIdValidator } from "../validator/paymentValidator.js";
+import { paymentIdValidator, pagination } from "../validator/paymentValidator.js";
 import stripe from "../services/stripeService.js";
 import { transferToDev } from "../services/payoutService.js";
+import {z} from "zod";
 
 export const createPayment = async (req ,res) => {
     try {
@@ -28,8 +28,7 @@ export const createPayment = async (req ,res) => {
 }
 
 
-export const releasePayment = async (req,res) => {
-    
+export const releasePayment = async (req,res) => {    
     try {
         if(!req.user) return res.status(401).json({message: "Không thể xác thực user!"});
         const clientId = req.user.userId;
@@ -56,7 +55,8 @@ export const releasePayment = async (req,res) => {
         try {
             await prisma.$transaction([
                 prisma.payments.update({where: {id: paymentId}, data: {status: "RELEASED", releasedAt: new Date(), stripeTransferId: stripeTransferId, releaseType: "MANUAL"}}),
-                prisma.contracts.update({where: {id: payment.contractId}, data: {status: "COMPLETED"}})
+                prisma.contracts.update({where: {id: payment.contractId}, data: {status: "COMPLETED"}}),
+                prisma.paymentLogs.create({data: {createdAt: new Date() ,fromStatus: "ESCROWED", toStatus: "RELEASED",action: "RELEASE_MANUAL", actorType:"CLIENT",stripeRef:stripeTransferId,note: "Release thủ công sau khi review!", paymentId: paymentId}})
             ]);
         } catch(dbError) {
             console.error(`[CRITICAL] cần xử lý thủ công:
@@ -65,6 +65,7 @@ export const releasePayment = async (req,res) => {
                 - contractId: ${payment.contractId}
                 - lỗi: ${dbError.message}
             `);
+            await prisma.paymentLogs.create({data: {createdAt: new Date() ,action : "RECONCILE_REQUIRED", paymentId: paymentId, stripeRef: stripeTransferId, note: `DbError: ${dbError}`, actorType: "SYSTEM"}});
             return res.status(500).json({message: "Có lỗi server! Vui lòng liên hệ hỗ trợ."});
         }
         const updtPayment = await prisma.payments.findFirst({where: {id: paymentId}, select: {id: true, status: true, releasedAt: true, contracts: {select: {id: true, status: true}}}});
@@ -117,7 +118,11 @@ export const checkoutStripe = async(req,res) => {
             success_url: `${process.env.CLIENT_URL}/payment/success`,
             cancel_url: `${process.env.CLIENT_URL}/payment/cancel`
         })
-        await prisma.payments.update({where: {id: paymentId}, data: {stripeSessionId: id, lastCheckoutAt: new Date( ), stripePaymentIntentId: payment_intent ?? null}});
+        await Promise.all([
+            prisma.payments.update({where: {id: paymentId}, data: {stripeSessionId: id, lastCheckoutAt: new Date( ), stripePaymentIntentId: payment_intent ?? null}}),
+            prisma.paymentLogs.create({data: {createdAt: new Date() ,actorType:"CLIENT", paymentId: paymentId, action:"CHECKOUT_INITIATED", fromStatus: "PENDING", toStatus: "PENDING", stripeRef: id, note: "Tạo checkout requested thủ công!"}})
+        
+        ])
         return res.status(200).json({sessionId : id, checkoutUrl: url, message: "Vui lòng thanh toán để tiếp tục"});
     } catch (error) {
         console.log(error);
@@ -139,6 +144,7 @@ export const handleStripeWebhook = async(req,res) => {
             if(!session.metadata.paymentId) return res.status(400).json({message: "Không lấy được paymentId từ metadata!"});
             const updated = await prisma.payments.updateMany({where: {id: session.metadata.paymentId,status: "PENDING"  },data: {stripePaymentIntentId: session.payment_intent,status: "ESCROWED",paidAt: new Date()}});
             if(updated.count === 0 ) return res.status(200).json({message: "Không tìm thấy payment hoặc đã xử lý rồi!"});
+            await prisma.paymentLogs.create({data: {createdAt: new Date() ,fromStatus: "PENDING", paymentId: session.metadata.paymentId, toStatus: "ESCROWED",actorType: "WEBHOOK", action: "CHECKOUT_COMPLETED", stripeRef: session.payment_intent}})
             return res.status(200).json({received: true});
         }
         case "payment_intent.payment_failed" : {
@@ -164,6 +170,7 @@ export const handleStripeWebhook = async(req,res) => {
                 console.log(`[Webhook] payment_intent.payment_failed | eventId: ${event.id} | intentId: ${paymentIntentId} | Không tìm thấy payment`);
                 return res.status(200).json({ received: true });
             }
+            await prisma.paymentLogs.create({data: {createdAt: new Date() ,actorType: "WEBHOOK", paymentId: payment.id,action: "PAYMENT_FAILED", fromStatus:"PENDING", toStatus:"PENDING",stripeRef: paymentIntentId, note: `eventId: ${event.id} | paymentId: ${payment.id} | intentId: ${paymentIntentId} | code: ${failureCode} | message: ${failureMessage}`}})
             console.log(`[Webhook] payment_intent.payment_failed | eventId: ${event.id} | paymentId: ${payment.id} | intentId: ${paymentIntentId} | code: ${failureCode} | message: ${failureMessage}`);
             return res.status(200).json({ received: true });
         }
@@ -180,6 +187,7 @@ export const handleStripeWebhook = async(req,res) => {
             }
             const upd = await prisma.payments.updateMany({where: {stripePaymentIntentId: paymentIntentId}, data: {status : "REFUNDED"}});
             if(upd.count === 0 ) return res.status(200).json({message: "Không tìm thấy payment hoặc đã xử lý rồi!"});
+            await prisma.paymentLogs.create({data: {createdAt: new Date() ,fromStatus: "ESCROWED", paymentId: payment.id,toStatus: "REFUNDED",actorType: "WEBHOOK", action: "REFUND_WEBHOOK", stripeRef: paymentIntentId, note: `eventId = ${event.data.object.id}`}})
             return res.status(200).json({received: true});
         }   
         case "charge.dispute.created" : {
@@ -208,6 +216,7 @@ export const handleStripeWebhook = async(req,res) => {
             prisma.payments.update({where: {id: payment.id}, data: {status: "DISPUTED",reviewedAt: new Date()}}),
             prisma.contracts.update({where: {id: contract.id}, data: {status: "DISPUTED"}})
             ])
+            await prisma.paymentLogs.create({data: {createdAt: new Date() ,fromStatus: "ESCROWED", paymentId: payment.id,toStatus: "DISPUTED",actorType:"WEBHOOK",action:"DISPUTE_WEBHOOK", stripeRef: paymentIntentId,note: `reason = ${event.data.object.reason ?? "Không có reason từ stripe!"}`}});
             console.log("Đã tạo dispute!");
             return res.status(200).json({received: true });
         }
@@ -223,3 +232,32 @@ export const handleStripeWebhook = async(req,res) => {
     }
 } 
 
+
+export const getPaymentLog = async (req,res) => {
+    try {
+        if(!req.user) return res.status(401).json({message: "Không thể xác thực user!"});
+        const {userId} = req.user;
+        if(!userId ) return res.status(401).json({message: "Không lấy được  user id!"});
+        const result = paymentIdValidator.safeParse(req.params);
+        const paginationLog = pagination.safeParse(req.query);
+        if(!paginationLog.success) return res.status(400).json({error: z.flattenError(paginationLog.error)});
+        if(!result.success) return res.status(400).json({error: z.flattenError(result.error)});
+        const {paymentId} = result.data;
+        const payment = await prisma.payments.findFirst({where: {id: paymentId}, include: {contracts: {select: {clientId: true, devId: true}}}});
+        if(!payment ) return res.status(404).json({message: "Không tìm thấy payment!"});
+        if(payment.contracts.devId !== userId && payment.contracts.clientId !== userId) return res.status(403).json({message: "Payment không thuộc về user!"});
+        const {page,limit,sortOrder} = paginationLog.data; 
+        const skip = (page-1)*limit;
+        const orderBy = { createdAt : sortOrder }; 
+        const [items, totalItems] = await Promise.all([
+            prisma.paymentLogs.findMany({where: {paymentId: paymentId}, skip,take: limit, orderBy}),
+            prisma.paymentLogs.count({where: {paymentId: paymentId}})
+        ])
+        const totalPages = Math.ceil(totalItems/limit);
+        if(items.length === 0) return res.status(404).json({message: "Không tồn tại logs nào!"});
+        return res.status(200).json({items, totalItems, totalPages});
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({message: "Có lỗi server !"});
+    }
+}

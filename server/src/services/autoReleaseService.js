@@ -3,18 +3,10 @@ import prisma from "../lib/prisma.js";
 
 export const processOneAutoRelease = async (payment, now) => {
     await prisma.$transaction(async (tx) => {
-        const updatedPayment = await tx.payments.updateMany({
-            where: {
-                id: payment.id,
-                status: "ESCROWED"  
-            },
-            data: {
-                status: "RELEASED",
-                releaseType: "AUTO",
-                releasedAt: now,
-                reviewedAt: now
-            }
-        });
+        const [updatedPayment, log] = await Promise([
+            tx.payments.updateMany({where: {id: payment.id,status: "ESCROWED"  },data: {status: "RELEASED",releaseType: "AUTO",releasedAt: now,reviewedAt: now}}),
+            tx.paymentLogs.create({data: {fromStatus: "ESCROWED", toStatus: "RELEASED",action:"RELEASE_AUTO", actorType:"SCHEDULER",note:"Đến hạn deadline!",createdAt: new Date() }})
+        ])
 
         if(updatedPayment.count === 0) {
             console.log(`[AutoRelease] Không có Payment nào đủ điều kiện xử lý`);
