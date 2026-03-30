@@ -10,3 +10,7 @@ export const loginSchema = registerSchema.pick({
     email: true,
     password: true
 })
+
+export const devIdValidator = z.object({
+    devId: z.uuid("Dev ID phải là UUID hợp lệ!")
+}) 
