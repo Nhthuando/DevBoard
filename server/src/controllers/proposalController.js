@@ -20,6 +20,8 @@ export const updateProposalStatus = async (req,res) =>{
         if(proposal.status === "ACCEPTED" || proposal.status === "REJECTED") return res.status(409).json({message: "Proposal đã ở trạng thái cuối!"});
         const {status} = resultBody.data;
         const updtProposal = await prisma.proposals.update({where: {id: proposalId}, data: {status: status}});
+        if(status === "ACCEPTED") await createNotification(proposal.devId,"PROPOSAL_ACCEPTED","Proposal được chấp nhận","Client đã chấp nhận proposal của bạn",proposal.id,"proposal");
+        else if(status === "REJECTED") await createNotification(proposal.devId,"PROPOSAL_REJECTED","Proposal bị từ chối","Client đã từ chối proposal của bạn",proposal.id,"proposal");
         return res.status(200).json({updtProposal});
     } catch (error) {
         console.log(error);

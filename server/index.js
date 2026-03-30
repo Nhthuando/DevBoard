@@ -7,6 +7,7 @@ import contractRouter from "./src/routes/contractRoute.js";
 import paymentRouter from "./src/routes/paymentRoute.js";
 import webhookRouter from "./src/routes/webhookRoute.js";
 import {startAutoReleaseScheduler,stopAutoReleaseScheduler} from "./src/jobs/autoReleaseScheduler.js";
+import notificationRouter from "./src/routes/notificationRoute.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -27,6 +28,7 @@ app.use("/api/jobs", jobRouter);
 app.use("/api/proposals", proposalRouter);
 app.use("/api/contracts", contractRouter);
 app.use("/api/payments", paymentRouter);
+app.use("/api/notifications",notificationRouter);
 
 app.listen(PORT, ()=>{
     console.log(`=========================================`);

@@ -1,5 +1,5 @@
 import prisma from "../lib/prisma.js";
-import {number, z} from "zod"
+import { z} from "zod"
 import {proposalIdValidator} from "../validator/proposalValidator.js"
 import {getContractSchema,contractIdValidator, submitDeliverySchema,reviewDeliverySchema} from "../validator/contractValidator.js"
 
@@ -154,7 +154,7 @@ export const reviewDelivery = async(req,res) => {
         if(payment.status !== "ESCROWED" || payment.reviewedAt) return res.status(409).json({message: "Payment đã reviewed!"});
         const {action,reason} = resultBody.data;
         if(action === "ACCEPT") {
-            
+            await prisma.payments.update({where: {id: payment.id}, data: {reviewedAt: new Date()}});
             return res.status(200).json({message:"Đã review!"});
         }
         if(action === "DISPUTE"){
