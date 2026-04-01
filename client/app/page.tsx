@@ -245,11 +245,21 @@ export default function HomePage() {
             </div>
           </div>
           <div className="border-t border-border pt-8 flex flex-col sm:flex-row justify-between items-center">
-            <p className="text-sm text-muted-foreground">© 2024 DevBoard. All rights reserved.</p>
+            <p className="text-sm text-muted-foreground">© 2026 DevBoard By Ngo Huu Thuan. All rights reserved.</p>
             <div className="flex gap-4 mt-4 sm:mt-0">
-              {['Twitter', 'GitHub', 'LinkedIn'].map((social) => (
-                <Link key={social} href="#" className="text-muted-foreground hover:text-foreground text-sm">
-                  {social}
+              {[
+                { label: 'Twitter', href: '#' },
+                { label: 'GitHub', href: 'https://github.com/Nhthuando' },
+                { label: 'LinkedIn', href: '#' },
+              ].map((social) => (
+                <Link
+                  key={social.label}
+                  href={social.href}
+                  className="text-muted-foreground hover:text-foreground text-sm"
+                  target={social.label === 'GitHub' ? '_blank' : undefined}
+                  rel={social.label === 'GitHub' ? 'noreferrer' : undefined}
+                >
+                  {social.label}
                 </Link>
               ))}
             </div>

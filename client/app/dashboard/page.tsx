@@ -291,7 +291,7 @@ export default function DashboardPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-foreground text-sm">{proposal.developer}</p>
                         <p className="text-xs text-muted-foreground">
-                          {proposal.rating} ⭐ • {proposal.jobs} jobs
+                          Submitted {formatDate(proposal.submittedAt)}
                         </p>
                       </div>
                     </div>

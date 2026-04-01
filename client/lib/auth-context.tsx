@@ -194,6 +194,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     apiClient.setToken(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+
+    if (typeof window !== 'undefined') {
+      window.location.replace('/');
+    }
   };
 
   return (

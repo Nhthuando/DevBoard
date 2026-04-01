@@ -1,140 +1,139 @@
-# 🖥️ DevBoard
+# DevBoard
 
-> A modern freelance job board built for developers — where every line of code gets fairly compensated.
+Freelance marketplace for software projects with full workflow: authentication, jobs, proposals, contracts, delivery review, notifications, ratings, and payment flow.
 
----
+## Author
 
-## ✨ Overview
+This project is created and maintained by **NgoHuuThuan**.
 
-**DevBoard** bridges the gap between clients who need software built and developers who build it. From job posting to final payment, every step of the workflow is handled in one place — with secure escrow to protect both sides.
+- GitHub: https://github.com/Nhthuando
 
-```
-Client posts job → Developer submits proposal → Client selects developer → Escrow via Stripe → Done ✅
-```
+## Highlights
 
----
+- Role-based platform: `CLIENT` and `DEV`
+- JWT authentication (`/api/auth/login`, `/api/auth/register`, `/api/auth/me`)
+- Job posting and proposal workflow
+- Contract lifecycle with delivery/review flow
+- Notifications and reviews
+- Payment integration and webhook support (Stripe)
+- Frontend wired to real backend APIs (no mock data on core pages)
 
-## 🚀 Features
+## Tech Stack
 
-- 🔐 **JWT Authentication** — Secure register & login with role-based access
-- 👥 **Role System** — Separate flows for `CLIENT` and `DEV`
-- 📋 **Job Posting** — Clients can post, edit, and manage job listings
-- 📨 **Proposal System** — Developers can browse and apply to open jobs
-- 💳 **Stripe Escrow** — Payments are held securely until project delivery
-- 🛡️ **RBAC Middleware** — Route-level protection based on user role
+### Frontend (`client`)
 
----
+- Next.js 16 (App Router)
+- React 19 + TypeScript
+- Tailwind CSS 4
+- Radix UI + custom UI components
 
-## 🛠️ Tech Stack
+### Backend (`server`)
 
-### Backend
-![Node.js](https://img.shields.io/badge/Node.js-339933?style=flat&logo=nodedotjs&logoColor=white)
-![Express](https://img.shields.io/badge/Express-000000?style=flat&logo=express&logoColor=white)
-![Prisma](https://img.shields.io/badge/Prisma-2D3748?style=flat&logo=prisma&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat&logo=postgresql&logoColor=white)
+- Node.js + Express 5
+- Prisma ORM
+- PostgreSQL (Neon-compatible)
+- JWT + bcryptjs
+- Stripe + Cloudinary integration
 
-### Frontend
-![React](https://img.shields.io/badge/React-61DAFB?style=flat&logo=react&logoColor=black)
-![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white)
+## Repository Structure
 
-### Infrastructure
-![Neon](https://img.shields.io/badge/Neon-00E599?style=flat&logo=neon&logoColor=black)
-![Stripe](https://img.shields.io/badge/Stripe-635BFF?style=flat&logo=stripe&logoColor=white)
-
----
-
-## 📁 Project Structure
-
-```
-server/
-├── src/
-│   ├── controllers/     # Request handlers
-│   ├── middlewares/     # Auth, RBAC
-│   ├── routes/          # API routes
-│   ├── lib/             # Prisma singleton
-│   └── validation/      # Zod schemas
-├── prisma/
-│   └── schema.prisma
-└── index.js
+```text
+DevBoard/
+|- client/   # Next.js frontend
+|- server/   # Express API + Prisma
+`- README.md
 ```
 
----
+## Quick Start
 
-## 🔧 Getting Started
-
-### Prerequisites
-- Node.js >= 18
-- PostgreSQL (or Neon account)
-
-### Installation
+### 1) Clone repository
 
 ```bash
-# Clone the repo
-git clone https://github.com/your-username/devboard.git
-cd devboard/server
-
-# Install dependencies
-npm install
-
-# Setup environment variables
-cp .env.example .env
-
-# Run database migrations
-npx prisma migrate dev
-
-# Start the server
-npm run dev
+git clone https://github.com/Nhthuando/DevBoard.git
+cd DevBoard
 ```
 
-### Environment Variables
+### 2) Setup backend
+
+```bash
+cd server
+npm install
+```
+
+Create `server/.env` with at least:
 
 ```env
 DATABASE_URL="postgresql://..."
-DIRECT_URL="postgresql://..."
-JWT_SECRET="your_secret_key"
+JWT_SECRET="your_jwt_secret"
 PORT=5000
+
+# Optional, used by payment/release features
+CLIENT_URL="http://localhost:3000"
+STRIPE_SECRET_KEY="sk_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."
+AUTO_RELEASE_JOB_ENABLED="false"
+AUTO_RELEASE_INTERVAL_MS="900000"
+AUTO_RELEASE_BATCH_SIZE="50"
+DATE_REVIEW_LIMIT="7"
+CLOUDINARY_NAME="..."
+CLOUDINARY_API_KEY="..."
+CLOUDINARY_API_SECRET="..."
 ```
 
----
+Run backend:
 
-## 📡 API Endpoints
-
-### Auth
-| Method | Endpoint | Description | Access |
-|--------|----------|-------------|--------|
-| POST | `/api/auth/register` | Register account | Public |
-| POST | `/api/auth/login` | Login & get token | Public |
-| GET | `/api/auth/me` | Get current user | Authenticated |
-
-### Jobs *(coming soon)*
-| Method | Endpoint | Description | Access |
-|--------|----------|-------------|--------|
-| POST | `/api/jobs` | Post a new job | CLIENT only |
-| GET | `/api/jobs` | Browse all jobs | DEV only |
-| POST | `/api/jobs/:id/apply` | Apply to a job | DEV only |
-
----
-
-## 🔒 Auth Flow
-
-```
-1. Register → password hashed với bcrypt
-2. Login    → JWT token trả về (expires 1h)
-3. Request  → gửi token trong Authorization header
-4. Server   → verify token → check role → allow/deny
+```bash
+npm start
 ```
 
----
+Backend runs at `http://localhost:5000`.
 
-## 👤 Author
+### 3) Setup frontend
 
-**Huu Thuan**
-> Building things, one endpoint at a time.
+```bash
+cd ../client
+npm install
+```
 
-[![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/Nhthuando)
+Create `client/.env.local`:
 
----
+```env
+NEXT_PUBLIC_API_URL=http://localhost:5000/api
+```
 
-## 📄 License
+Run frontend:
 
-MIT © Huu Thuan
+```bash
+npm run dev
+```
+
+Frontend runs at `http://localhost:3000`.
+
+## Scripts
+
+### Frontend (`client`)
+
+- `npm run dev` - start Next.js dev server
+- `npm run build` - production build
+- `npm run start` - run production build
+- `npm run lint` - lint source
+
+### Backend (`server`)
+
+- `npm start` - run API server via nodemon
+
+## API Base URL
+
+Frontend API client is configured in `client/lib/api.ts`:
+
+- `NEXT_PUBLIC_API_URL` (recommended)
+- fallback: `http://localhost:5000/api`
+
+## Notes
+
+- If login page loads but login request fails, ensure backend is running and CORS origin matches your frontend URL.
+- Keep `.env` files private and do not commit secrets.
+
+## Copyright
+
+© 2026 DevBoard By Ngo Huu Thuan. All rights reserved.
