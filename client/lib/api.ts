@@ -1,4 +1,8 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const RAW_API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const NORMALIZED_API_BASE = RAW_API_BASE_URL.replace(/\/+$/, '');
+const API_BASE_URL = NORMALIZED_API_BASE.endsWith('/api')
+  ? NORMALIZED_API_BASE
+  : `${NORMALIZED_API_BASE}/api`;
 
 export type ApiErrorCode = 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500;
 

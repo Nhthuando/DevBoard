@@ -16,20 +16,32 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-const allowedOrigins = [
-    "http://localhost:3000",
-    "http://localhost:5173"
-];
+const envOrigins = [process.env.CLIENT_URL, process.env.CLIENT_URLS]
+    .flatMap((value) => (value ? value.split(",") : []))
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
-app.use(cors({
+const allowedOrigins = new Set([
+    "http://localhost:3000",
+    "http://localhost:5173",
+    ...envOrigins,
+]);
+
+const isVercelOrigin = (origin) => /^https:\/\/.*\.vercel\.app$/i.test(origin);
+
+const corsOptions = {
     origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
+        if (!origin || allowedOrigins.has(origin) || isVercelOrigin(origin)) {
             return callback(null, true);
         }
         return callback(new Error(`Origin ${origin} not allowed by CORS`));
     },
-    credentials: true
-}));
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+};
+
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 app.use("/webhook", webhookRouter);
 
 
