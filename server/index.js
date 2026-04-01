@@ -1,3 +1,4 @@
+import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
 import authRouter from "./src/routes/authRoute.js";
@@ -10,13 +11,23 @@ import {startAutoReleaseScheduler,stopAutoReleaseScheduler} from "./src/jobs/aut
 import notificationRouter from "./src/routes/notificationRoute.js";
 import reviewRouter from "./src/routes/reviewRoute.js"
 
+dotenv.config();
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+const allowedOrigins = [
+    "http://localhost:3000",
+    "http://localhost:5173"
+];
+
 app.use(cors({
-    origin: [
-        "http://localhost:5173"
-    ],
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        return callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
     credentials: true
 }));
 app.use("/webhook", webhookRouter);
