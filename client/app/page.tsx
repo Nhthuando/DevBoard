@@ -87,13 +87,13 @@ export default function HomePage() {
 
       {/* How It Works Section */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 bg-muted/30">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           <h2 className="text-4xl font-bold text-foreground text-center mb-16">How it works</h2>
           
-          <div className="grid md:grid-cols-2 gap-12">
+          <div className="grid md:grid-cols-2 gap-12 xl:gap-20 items-start">
             {/* For Clients */}
-            <div className="space-y-8">
-              <h3 className="text-2xl font-bold text-foreground flex items-center gap-3">
+            <div className="space-y-8 mx-auto w-full max-w-xl">
+              <h3 className="text-2xl font-bold text-foreground flex items-center justify-center md:justify-start gap-3">
                 <Briefcase className="w-8 h-8 text-primary" />
                 For Clients
               </h3>
@@ -119,8 +119,8 @@ export default function HomePage() {
             </div>
 
             {/* For Developers */}
-            <div className="space-y-8">
-              <h3 className="text-2xl font-bold text-foreground flex items-center gap-3">
+            <div className="space-y-8 mx-auto w-full max-w-xl">
+              <h3 className="text-2xl font-bold text-foreground flex items-center justify-center md:justify-start gap-3">
                 <Users className="w-8 h-8 text-accent" />
                 For Developers
               </h3>

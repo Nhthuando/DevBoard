@@ -49,10 +49,14 @@ export function Header() {
           ) : (
             <>
               {/* Notifications */}
-              <button className="relative p-2 hover:bg-muted rounded-lg transition">
+              <Link
+                href="/notifications"
+                aria-label="Open notifications"
+                className="relative p-2 hover:bg-muted rounded-lg transition"
+              >
                 <Bell className="w-5 h-5 text-muted-foreground" />
                 <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full"></span>
-              </button>
+              </Link>
 
               {/* User Menu */}
               <DropdownMenu>
